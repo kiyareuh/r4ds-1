@@ -1,0 +1,15 @@
+---
+title: "Billboard Hot 100"
+execute:
+  echo: false
+---
+```{r}
+#| cache: true
+#| message: false
+library(tidyverse)
+```
+
+```{r}
+billboard <- read_csv("data/billboard.csv")
+summary(billboard$date.entered)
+```
