@@ -4,7 +4,6 @@ execute:
   echo: false
 ---
 ```{r}
-#| cache: true
 #| message: false
 library(tidyverse)
 ```
@@ -12,4 +11,103 @@ library(tidyverse)
 ```{r}
 billboard <- read_csv("data/billboard.csv")
 summary(billboard$date.entered)
+
+billboard |>
+  pivot_longer(
+    cols = starts_with("wk"),
+    names_to = "week",
+    names_prefix = "wk",
+    names_transform = list(week = as.integer),
+    values_to = "rank"
+  ) |>
+  ggplot(aes(
+    x = week,
+    y = rank,
+    group = interaction(artist, track)
+  )) +
+  geom_line(alpha = 0.2) +
+  scale_y_reverse() +
+  labs(
+    title = "Billboard Hot 100 song rankings over time",
+    x = "Week on chart",
+    y = "Ranking"
+  )
+
+weekly_ranks <- billboard |>
+  pivot_longer(
+    cols = starts_with("wk"),
+    names_to = "week",
+    names_prefix = "wk",
+    names_transform = list(week = as.integer),
+    values_to = "rank"
+  )
+
+song_summary <- weekly_ranks |>
+  filter(!is.na(rank)) |>
+  group_by(artist, track) |>
+  summarise(
+    first_rank = first(rank),
+    best_rank = min(rank),
+    first_week_at_best_rank = min(week[rank == min(rank)]),
+    total_weeks = n(),
+    .groups = "drop"
+  )
+
+notable_songs <- bind_rows(
+  song_summary |>
+    filter(best_rank == 1) |>
+    slice_min(first_week_at_best_rank, n = 1, with_ties = FALSE) |>
+    mutate(notable = "Fastest to number one"),
+  song_summary |>
+    filter(best_rank == 1) |>
+    slice_max(first_week_at_best_rank, n = 1, with_ties = FALSE) |>
+    mutate(notable = "Slowest to number one"),
+  song_summary |>
+    filter(best_rank <= 10) |>
+    slice_max(total_weeks, n = 1, with_ties = FALSE) |>
+    mutate(notable = "Longest chart run among top-10 songs")
+) |>
+  select(notable, artist, track, first_rank, best_rank,
+         first_week_at_best_rank, total_weeks)
+
+print(notable_songs, width = Inf)
+
+top_10_ranks <- weekly_ranks |>
+  semi_join(
+    song_summary |> filter(best_rank <= 10),
+    by = c("artist", "track")
+  ) |>
+  left_join(
+    notable_songs |>
+      transmute(
+        artist,
+        track,
+        notable_song = paste(artist, track, sep = " — ")
+      ),
+    by = c("artist", "track")
+  )
+
+top_10_ranks |>
+  ggplot(aes(
+    x = week,
+    y = rank,
+    group = interaction(artist, track)
+  )) +
+  geom_line(
+    data = filter(top_10_ranks, is.na(notable_song)),
+    color = "gray70",
+    alpha = 0.5
+  ) +
+  geom_line(
+    data = filter(top_10_ranks, !is.na(notable_song)),
+    aes(color = notable_song),
+    linewidth = 0.8
+  ) +
+  scale_y_reverse() +
+  labs(
+    title = "Billboard Hot 100 top-10 song rankings",
+    x = "Week on chart",
+    y = "Ranking",
+    color = "Notable songs"
+  )
 ```
